@@ -1,25 +1,23 @@
-import socket
-import threading
+from flask import Flask, render_template, request, session
+from flask_socketio import SocketIO, emit, join_room, leave_room
 import os
+from datetime import datetime
 
-# Use Render's PORT environment variable, default to 10000
-PORT = int(os.getenv('PORT', 10000))
-HOST = '0.0.0.0'  # Listen on all interfaces
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
+socketio = SocketIO(app, cors_allowed_origins="*")
 
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Allow port reuse
-server.bind((HOST, PORT))
-server.listen()
-
-clients = {}  # socket -> username
+# File paths
 user_file = "users.txt"
 chat_log = "chat_history.txt"
 
-# Ensure users.txt exists
+# In-memory storage of connected users
+connected_users = {}  # session_id -> username
+
+# Ensure files exist
 if not os.path.exists(user_file):
     open(user_file, 'w').close()
 
-# Ensure chat_history.txt exists
 if not os.path.exists(chat_log):
     open(chat_log, 'w').close()
 
@@ -36,85 +34,112 @@ def log_message(msg):
     with open(chat_log, 'a') as f:
         f.write(msg + '\n')
 
-def private_message(sender, recipient, message):
-    for client, uname in clients.items():
-        if uname == recipient:
-            try:
-                client.send(f"[DM from {sender}]: {message}".encode('utf-8'))
-                return True
-            except:
-                return False
-    return False
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-def broadcast(message, exclude=None):
-    for client in clients:
-        if client != exclude:
-            try:
-                client.send(message.encode('utf-8'))
-            except:
-                client.close()
-                if client in clients:
-                    del clients[client]
+@socketio.on('connect')
+def handle_connect():
+    print(f"[SERVER] Client connected: {request.sid}")
+    emit('response', {'data': 'Connected to server'})
 
-def handle_client(client):
-    try:
-        client.send("Username: ".encode('utf-8'))
-        username = client.recv(1024).decode('utf-8').strip()
+@socketio.on('login')
+def handle_login(data):
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
 
-        client.send("Password: ".encode('utf-8'))
-        password = client.recv(1024).decode('utf-8').strip()
+    if not username or not password:
+        emit('login_response', {'success': False, 'message': 'Username and password required'})
+        return
 
-        users = load_users()
+    users = load_users()
 
-        if username in users:
-            if users[username] != password:
-                client.send("Incorrect password.\n".encode('utf-8'))
-                client.close()
-                return
-        else:
-            with open(user_file, 'a') as f:
-                f.write(f"{username}:{password}\n")
+    # Check if user exists
+    if username in users:
+        if users[username] != password:
+            emit('login_response', {'success': False, 'message': 'Incorrect password'})
+            return
+    else:
+        # Create new user
+        with open(user_file, 'a') as f:
+            f.write(f"{username}:{password}\n")
 
-        clients[client] = username
-        print(f"[SERVER] {username} connected.")
-        broadcast(f"[SERVER] {username} joined the chat.", client)
-        client.send("Connected! Type @user: message for private messages.\n".encode('utf-8'))
+    # Store user session
+    session['username'] = username
+    connected_users[request.sid] = username
 
-        while True:
-            msg = client.recv(1024).decode('utf-8').strip()
-            if msg == "":
-                continue
+    print(f"[SERVER] {username} logged in")
+    emit('login_response', {'success': True, 'message': f'Welcome {username}!'})
+    
+    # Notify all users
+    socketio.emit('user_joined', {
+        'username': username,
+        'message': f'{username} joined the chat'
+    })
 
-            if msg.startswith("@"):
-                try:
-                    recipient, content = msg[1:].split(":", 1)
-                    success = private_message(username, recipient.strip(), content.strip())
-                    if not success:
-                        client.send("User not found or offline.\n".encode('utf-8'))
-                    else:
-                        log_message(f"[DM] {username} -> {recipient.strip()}: {content.strip()}")
-                except ValueError:
-                    client.send("Invalid format. Use @username: message\n".encode('utf-8'))
+@socketio.on('message')
+def handle_message(data):
+    if request.sid not in connected_users:
+        emit('error', {'message': 'Not logged in'})
+        return
+
+    username = connected_users[request.sid]
+    msg = data.get('message', '').strip()
+
+    if not msg:
+        return
+
+    # Check for private message format: @username: message
+    if msg.startswith("@"):
+        try:
+            recipient, content = msg[1:].split(":", 1)
+            recipient = recipient.strip()
+            content = content.strip()
+
+            # Find recipient's session ID
+            recipient_sid = None
+            for sid, uname in connected_users.items():
+                if uname == recipient:
+                    recipient_sid = sid
+                    break
+
+            if recipient_sid:
+                socketio.emit('private_message', {
+                    'from': username,
+                    'message': content
+                }, to=recipient_sid)
+                
+                emit('private_message_sent', {
+                    'to': recipient,
+                    'message': content
+                })
+                
+                log_message(f"[DM] {username} -> {recipient}: {content}")
             else:
-                full_msg = f"{username}: {msg}"
-                broadcast(full_msg, client)
-                log_message(full_msg)
+                emit('error', {'message': f'User {recipient} not found or offline'})
+        except ValueError:
+            emit('error', {'message': 'Invalid format. Use @username: message'})
+    else:
+        # Broadcast message
+        full_msg = f"{username}: {msg}"
+        socketio.emit('message', {
+            'username': username,
+            'message': msg,
+            'timestamp': datetime.now().strftime('%H:%M:%S')
+        })
+        log_message(full_msg)
 
-    except:
-        pass
-    finally:
-        if client in clients:
-            uname = clients[client]
-            print(f"[SERVER] {uname} disconnected.")
-            broadcast(f"[SERVER] {uname} has left.")
-            del clients[client]
-            client.close()
+@socketio.on('disconnect')
+def handle_disconnect():
+    if request.sid in connected_users:
+        username = connected_users[request.sid]
+        del connected_users[request.sid]
+        print(f"[SERVER] {username} disconnected")
+        socketio.emit('user_left', {
+            'username': username,
+            'message': f'{username} left the chat'
+        })
 
-def start():
-    print(f"[SERVER] Listening on {HOST}:{PORT}...")
-    while True:
-        client, addr = server.accept()
-        threading.Thread(target=handle_client, args=(client,), daemon=True).start()
-
-if __name__ == "__main__":
-    start()
+if __name__ == '__main__':
+    port = int(os.getenv('PORT', 10000))
+    socketio.run(app, host='0.0.0.0', port=port, debug=False)
