@@ -2,10 +2,12 @@ import socket
 import threading
 import os
 
-HOST = '127.0.0.1'
-PORT = 55555
+# Use Render's PORT environment variable, default to 10000
+PORT = int(os.getenv('PORT', 10000))
+HOST = '0.0.0.0'  # Listen on all interfaces
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Allow port reuse
 server.bind((HOST, PORT))
 server.listen()
 
@@ -16,6 +18,10 @@ chat_log = "chat_history.txt"
 # Ensure users.txt exists
 if not os.path.exists(user_file):
     open(user_file, 'w').close()
+
+# Ensure chat_history.txt exists
+if not os.path.exists(chat_log):
+    open(chat_log, 'w').close()
 
 def load_users():
     users = {}
@@ -105,9 +111,10 @@ def handle_client(client):
             client.close()
 
 def start():
-    print("[SERVER] Listening...")
+    print(f"[SERVER] Listening on {HOST}:{PORT}...")
     while True:
         client, addr = server.accept()
         threading.Thread(target=handle_client, args=(client,), daemon=True).start()
 
-start()
+if __name__ == "__main__":
+    start()
