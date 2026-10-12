@@ -91,6 +91,12 @@
             font-size: 20px;
         }
         
+        .chat-header small {
+            display: block;
+            margin-top: 5px;
+            opacity: 0.9;
+        }
+        
         .messages {
             flex: 1;
             overflow-y: auto;
@@ -174,9 +180,42 @@
         .logout-btn:hover {
             background: #ff5252;
         }
+
+        .notification-badge {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 5px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: none;
+            z-index: 9999;
+            animation: slideIn 0.3s ease-out;
+            max-width: 300px;
+            word-wrap: break-word;
+        }
+
+        .notification-badge.show {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body>
+    <div class="notification-badge" id="notificationBadge"></div>
+    
     <div class="container">
         <!-- Login Section -->
         <div class="login-section active" id="loginSection">
@@ -206,6 +245,11 @@
         const socket = io();
         let currentUsername = '';
 
+        // Request notification permission on load
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
         socket.on('connect', () => {
             console.log('Connected to server');
         });
@@ -222,8 +266,36 @@
             }
         });
 
+        // Load chat history when user logs in
+        socket.on('chat_history', (data) => {
+            const messages = data.messages;
+            if (messages && messages.length > 0) {
+                messages.forEach(msg => {
+                    if (msg.type === 'public') {
+                        // Extract time from timestamp
+                        const timeStr = msg.timestamp.includes(' ') 
+                            ? msg.timestamp.split(' ')[1] 
+                            : msg.timestamp;
+                        addMessage(`${msg.sender}: ${msg.content}`, 'regular', msg.sender, timeStr);
+                    } else if (msg.type === 'private') {
+                        if (msg.sender === currentUsername) {
+                            addMessage(`[DM to ${msg.recipient}]: ${msg.content}`, 'private', `to ${msg.recipient}`);
+                        } else if (msg.recipient === currentUsername) {
+                            addMessage(`[DM from ${msg.sender}]: ${msg.content}`, 'private', msg.sender);
+                        }
+                    } else if (msg.type === 'system') {
+                        addMessage(msg.content, 'system');
+                    }
+                });
+                // Scroll to bottom
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+        });
+
         socket.on('message', (data) => {
             addMessage(`${data.username}: ${data.message}`, 'regular', data.username, data.timestamp);
+            sendNotification(`New message from ${data.username}`, data.message);
         });
 
         socket.on('user_joined', (data) => {
@@ -236,6 +308,7 @@
 
         socket.on('private_message', (data) => {
             addMessage(`[DM from ${data.from}]: ${data.message}`, 'private', data.from);
+            sendNotification(`Private message from ${data.from}`, data.message);
         });
 
         socket.on('private_message_sent', (data) => {
@@ -245,6 +318,26 @@
         socket.on('error', (data) => {
             showChatError(data.message);
         });
+
+        function sendNotification(title, message) {
+            // Show in-app notification badge
+            showNotificationBadge(`${title}: ${message}`);
+            
+            // Send browser notification if permission granted
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(title, {
+                    body: message,
+                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="75" font-size="75">💬</text></svg>'
+                });
+            }
+        }
+
+        function showNotificationBadge(message) {
+            const badge = document.getElementById('notificationBadge');
+            badge.textContent = message;
+            badge.classList.add('show');
+            setTimeout(() => badge.classList.remove('show'), 3000);
+        }
 
         function login() {
             const username = document.getElementById('username').value.trim();
@@ -284,6 +377,9 @@
                 messageEl.innerHTML = text;
             } else if (type === 'private') {
                 messageEl.innerHTML = `<strong>${user}</strong><br>${text}`;
+                if (time) {
+                    messageEl.innerHTML += `<div class="message-time">${time}</div>`;
+                }
             } else {
                 messageEl.innerHTML = `<strong>${user}</strong><br>${text}`;
                 if (time) {
