@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard - Chat Server</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+        }
+        
+        .header a {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .header a:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-box {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 4px solid #667eea;
+        }
+        
+        .stat-box h3 {
+            color: #666;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        
+        .stat-box .number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        
+        table thead {
+            background: #f8f9fa;
+        }
+        
+        table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+            color: #333;
+            border-bottom: 2px solid #eee;
+        }
+        
+        table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        
+        .badge-public {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .badge-private {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+        
+        .badge-system {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+        
+        .online-users {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        
+        .user-tag {
+            background: #667eea;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+        
+        .empty {
+            text-align: center;
+            color: #999;
+            padding: 20px;
+        }
+        
+        .scroll-table {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .timestamp {
+            color: #999;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔐 Admin Dashboard</h1>
+        <a href="/admin/logout">Logout</a>
+    </div>
+    
+    <!-- Stats Section -->
+    <div class="stats">
+        <div class="stat-box">
+            <h3>Connected Users</h3>
+            <div class="number">{{ stats.connected_users }}</div>
+        </div>
+        <div class="stat-box">
+            <h3>Total Users</h3>
+            <div class="number">{{ stats.total_users }}</div>
+        </div>
+        <div class="stat-box">
+            <h3>Total Messages</h3>
+            <div class="number">{{ stats.total_messages }}</div>
+        </div>
+    </div>
+    
+    <!-- Online Users Section -->
+    {% if stats.online_now %}
+    <div class="section">
+        <h2>👥 Currently Online</h2>
+        <div class="online-users">
+            {% for user in stats.online_now %}
+            <div class="user-tag">{{ user }}</div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Users Section -->
+    <div class="section">
+        <h2>📋 All Users</h2>
+        {% if users %}
+        <div class="scroll-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Created At</th>
+                        <th>Messages</th>
+                        <th>Activity Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td><strong>{{ user.username }}</strong></td>
+                        <td><span class="timestamp">{{ user.created_at }}</span></td>
+                        <td>{{ user.message_count }}</td>
+                        <td>{{ user.activity_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">No users yet</div>
+        {% endif %}
+    </div>
+    
+    <!-- Messages Section -->
+    <div class="section">
+        <h2>💬 Recent Messages</h2>
+        {% if messages %}
+        <div class="scroll-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>From</th>
+                        <th>To</th>
+                        <th>Message</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for msg in messages %}
+                    <tr>
+                        <td>
+                            {% if msg.type == 'public' %}
+                            <span class="badge badge-public">PUBLIC</span>
+                            {% elif msg.type == 'private' %}
+                            <span class="badge badge-private">PRIVATE</span>
+                            {% else %}
+                            <span class="badge badge-system">SYSTEM</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ msg.sender }}</td>
+                        <td>{{ msg.recipient if msg.recipient else '-' }}</td>
+                        <td>{{ msg.content[:50] }}{% if msg.content|length > 50 %}...{% endif %}</td>
+                        <td><span class="timestamp">{{ msg.timestamp }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">No messages yet</div>
+        {% endif %}
+    </div>
+    
+    <!-- Activity Log Section -->
+    <div class="section">
+        <h2>📊 Activity Log</h2>
+        {% if activity %}
+        <div class="scroll-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in activity %}
+                    <tr>
+                        <td><strong>{{ log.username }}</strong></td>
+                        <td>{{ log.action }}</td>
+                        <td><span class="timestamp">{{ log.timestamp }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">No activity yet</div>
+        {% endif %}
+    </div>
+</body>
+</html>
