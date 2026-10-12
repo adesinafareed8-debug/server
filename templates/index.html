@@ -6,89 +6,147 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Courier New', monospace;
+            background: #0a0e27;
+            color: #00ff41;
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
+            text-shadow: 0 0 10px #00ff41;
         }
         .container {
             width: 90%;
             max-width: 520px;
-            background: white;
-            border-radius: 10px;
+            background: #0f1419;
+            border-radius: 0;
             overflow: hidden;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            box-shadow: 0 0 30px rgba(0, 255, 65, 0.3), inset 0 0 20px rgba(0, 0, 0, 0.9);
+            border: 2px solid #00ff41;
         }
         .login-section, .chat-section { display: none; }
         .login-section.active, .chat-section.active { display: block; }
-        .login-section { padding: 30px; background: #f8f9fa; }
+        .login-section { 
+            padding: 30px; 
+            background: #0a0e27;
+            border-bottom: 2px solid #00ff41;
+        }
         .chat-section {
             height: 620px;
             display: none;
             flex-direction: column;
         }
         .chat-section.active { display: flex; }
-        h2 { text-align: center; margin-bottom: 20px; color: #333; }
+        h2 { 
+            text-align: center; 
+            margin-bottom: 20px; 
+            color: #00ff41;
+            text-shadow: 0 0 10px #00ff41;
+            font-size: 24px;
+        }
         input {
             width: 100%;
             padding: 12px;
             margin-bottom: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+            border: 1px solid #00ff41;
+            background: #0f1419;
+            color: #00ff41;
+            border-radius: 0;
             font-size: 14px;
+            font-family: 'Courier New', monospace;
+            text-shadow: 0 0 5px #00ff41;
+        }
+        input:focus {
+            outline: none;
+            border-color: #00ff41;
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.5), inset 0 0 10px rgba(0, 255, 65, 0.1);
+            background: rgba(0, 255, 65, 0.05);
         }
         button {
             width: 100%;
             padding: 12px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 5px;
+            background: #1a1f3a;
+            color: #00ff41;
+            border: 2px solid #00ff41;
+            border-radius: 0;
             font-size: 16px;
             cursor: pointer;
+            font-family: 'Courier New', monospace;
+            text-transform: uppercase;
+            font-weight: bold;
+            transition: all 0.3s;
+            text-shadow: 0 0 5px #00ff41;
         }
-        button:hover { background: #764ba2; }
+        button:hover { 
+            background: #00ff41;
+            color: #0a0e27;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.6);
+            text-shadow: none;
+        }
         .chat-header {
-            background: #667eea;
-            color: white;
+            background: #0a0e27;
+            color: #00ff41;
             padding: 15px;
             text-align: center;
+            border-bottom: 2px solid #00ff41;
+            text-shadow: 0 0 10px #00ff41;
         }
         .chat-header h2 { margin: 0; font-size: 20px; }
+        .chat-header small { 
+            display: block; 
+            margin-top: 5px; 
+            opacity: 0.8;
+            color: #00cc33;
+        }
         .messages {
             flex: 1;
             overflow-y: auto;
             padding: 15px;
-            background: #f8f9fa;
+            background: #0f1419;
         }
         .message {
             margin-bottom: 12px;
             padding: 10px;
-            background: white;
-            border-radius: 6px;
-            border-left: 4px solid #667eea;
+            background: #1a1f3a;
+            border-radius: 0;
+            border-left: 4px solid #00ff41;
+            border: 1px solid #00ff41;
+            color: #00ff41;
+            text-shadow: 0 0 5px #00ff41;
         }
         .message.system {
-            border-left-color: #999;
-            background: #e9ecef;
+            border-left-color: #00cc33;
+            border-color: #00cc33;
+            background: #0a0e27;
             font-style: italic;
-            color: #666;
+            color: #00cc33;
+            text-shadow: 0 0 5px #00cc33;
         }
         .message.private {
-            border-left-color: #ffc107;
-            background: #fff3cd;
+            border-left-color: #00ff41;
+            border-color: #00ff41;
+            background: rgba(0, 255, 65, 0.1);
         }
-        .message strong { color: #667eea; }
-        .message.private strong { color: #ff6b6b; }
-        .message-time { font-size: 12px; color: #999; margin-top: 5px; }
+        .message strong { 
+            color: #00ff41;
+            text-shadow: 0 0 8px #00ff41;
+        }
+        .message.private strong { 
+            color: #00ff41;
+            text-shadow: 0 0 8px #00ff41;
+        }
+        .message-time { 
+            font-size: 12px; 
+            color: #00cc33; 
+            margin-top: 5px;
+            text-shadow: 0 0 5px #00cc33;
+        }
         .input-area {
             display: flex;
             gap: 10px;
             padding: 15px;
-            background: white;
-            border-top: 1px solid #ddd;
+            background: #0a0e27;
+            border-top: 2px solid #00ff41;
         }
         .input-area input { margin: 0; flex: 1; }
         .input-area button { width: 90px; padding: 10px; }
@@ -97,8 +155,8 @@
             gap: 8px;
             align-items: center;
             padding: 10px 15px;
-            background: #f1f3f5;
-            border-top: 1px solid #ddd;
+            background: #0a0e27;
+            border-top: 2px solid #00ff41;
         }
         .media-upload input[type=file] {
             width: auto;
@@ -112,64 +170,90 @@
             font-size: 14px;
         }
         .logout-btn {
-            background: #ff6b6b;
+            background: #2a1a1a;
+            border-color: #ff4444;
+            color: #ff4444;
             padding: 10px 20px;
             width: auto;
-            margin: 10px 0 0 0;
+            margin: 10px 15px 0 15px;
+            text-shadow: 0 0 5px #ff4444;
         }
-        .logout-btn:hover { background: #ff5252; }
+        .logout-btn:hover { 
+            background: #ff4444;
+            color: #0a0e27;
+            text-shadow: none;
+            box-shadow: 0 0 20px rgba(255, 68, 68, 0.6);
+        }
         .error {
-            color: #ff6b6b;
-            background: #ffe0e0;
-            border-radius: 5px;
+            color: #ff4444;
+            background: rgba(255, 68, 68, 0.2);
+            border: 1px solid #ff4444;
+            border-radius: 0;
             padding: 10px;
             display: none;
             margin-bottom: 10px;
+            text-shadow: 0 0 5px #ff4444;
         }
         .error.show { display: block; }
         .media-preview {
             max-width: 100%;
             max-height: 240px;
-            border-radius: 8px;
+            border-radius: 0;
             margin-top: 8px;
             display: block;
+            border: 1px solid #00ff41;
         }
         video.media-preview {
             width: 100%;
             max-height: 240px;
-            background: #111;
+            background: #000;
+            border: 1px solid #00ff41;
+        }
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0e27;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #00ff41;
+            border-radius: 0;
+            box-shadow: 0 0 10px #00ff41;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00cc33;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="login-section active" id="loginSection">
-            <h2>Chat Server Login</h2>
+            <h2>[ CHAT SERVER ]</h2>
             <div class="error" id="loginError"></div>
-            <input type="text" id="username" placeholder="Username" />
-            <input type="password" id="password" placeholder="Password" />
-            <button onclick="login()">Login</button>
+            <input type="text" id="username" placeholder="> username" />
+            <input type="password" id="password" placeholder="> password" />
+            <button onclick="login()">[ LOGIN ]</button>
         </div>
 
         <div class="chat-section" id="chatSection">
             <div class="chat-header">
-                <h2>Chat - <span id="currentUser"></span></h2>
-                <small>Tip: Use @username: message for private messages</small>
+                <h2>[ CHAT - <span id="currentUser"></span> ]</h2>
+                <small>> Use @username: message for private messages</small>
             </div>
 
             <div class="messages" id="messages"></div>
 
             <div class="media-upload">
                 <input type="file" id="mediaUpload" accept="image/*,video/*" />
-                <button onclick="uploadMedia()">Attach</button>
+                <button onclick="uploadMedia()">[ ATTACH ]</button>
             </div>
 
             <div class="input-area">
-                <input type="text" id="messageInput" placeholder="Type message..." onkeypress="handleKeyPress(event)" />
-                <button onclick="sendMessage()">Send</button>
+                <input type="text" id="messageInput" placeholder="> message..." onkeypress="handleKeyPress(event)" />
+                <button onclick="sendMessage()">[ SEND ]</button>
             </div>
 
-            <button class="logout-btn" onclick="logout()">Logout</button>
+            <button class="logout-btn" onclick="logout()">[ LOGOUT ]</button>
         </div>
     </div>
 
@@ -177,7 +261,7 @@
         const socket = io();
         let currentUsername = '';
 
-        socket.on('connect', () => { console.log('Connected'); });
+        socket.on('connect', () => { console.log('[+] Connected'); });
 
         socket.on('login_response', (data) => {
             if (data.success) {
@@ -264,7 +348,7 @@
                     ? `<video class="media-preview" controls src="${msg.media_url}"></video>`
                     : `<img class="media-preview" src="${msg.media_url}" />`;
 
-                messageEl.innerHTML = `<strong>${label}</strong><br>${mediaHtml}`;
+                messageEl.innerHTML = `<strong>> ${label}</strong><br>${mediaHtml}`;
                 if (msg.timestamp) {
                     messageEl.innerHTML += `<div class="message-time">${msg.timestamp}</div>`;
                 }
@@ -275,7 +359,7 @@
 
         function showLoginError(msg) {
             const errorDiv = document.getElementById('loginError');
-            errorDiv.textContent = msg;
+            errorDiv.textContent = '[ ERROR ] ' + msg;
             errorDiv.classList.add('show');
             setTimeout(() => errorDiv.classList.remove('show'), 3000);
         }
@@ -284,7 +368,7 @@
             const messagesDiv = document.getElementById('messages');
             const errorEl = document.createElement('div');
             errorEl.className = 'message system';
-            errorEl.innerHTML = `<strong>Error:</strong> ${msg}`;
+            errorEl.innerHTML = `<strong>> ERROR:</strong> ${msg}`;
             messagesDiv.appendChild(errorEl);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
@@ -295,9 +379,9 @@
             messageEl.className = `message ${type}`;
 
             if (type === 'system') {
-                messageEl.innerHTML = text;
+                messageEl.innerHTML = `[ ${text} ]`;
             } else {
-                messageEl.innerHTML = `<strong>${user}</strong><br>${text}`;
+                messageEl.innerHTML = `<strong>> ${user}</strong><br>${text}`;
                 if (time) {
                     messageEl.innerHTML += `<div class="message-time">${time}</div>`;
                 }
@@ -312,7 +396,7 @@
             const password = document.getElementById('password').value.trim();
 
             if (!username || !password) {
-                showLoginError('Please enter username and password');
+                showLoginError('Username and password required');
                 return;
             }
 
@@ -351,7 +435,7 @@
 
                 const data = await res.json();
                 if (data.error) {
-                    alert(data.error);
+                    alert('[!] ' + data.error);
                     return;
                 }
 
@@ -362,7 +446,7 @@
                 });
                 fileInput.value = '';
             } catch (err) {
-                alert('Upload failed: ' + err.message);
+                alert('[!] Upload failed: ' + err.message);
             }
         }
 
