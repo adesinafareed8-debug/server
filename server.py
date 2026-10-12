@@ -1,20 +1,30 @@
-from flask import Flask, render_template, request, session, redirect, url_for
+from flask import Flask, render_template, request, session
 from flask_socketio import SocketIO, emit
 import os
 import sqlite3
 from datetime import datetime
 from contextlib import contextmanager
+import cloudinary
+import cloudinary.uploader
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Cloudinary config
+cloudinary.config(
+    cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME'),
+    api_key=os.getenv('CLOUDINARY_API_KEY'),
+    api_secret=os.getenv('CLOUDINARY_API_SECRET'),
+    secure=True
+)
 
 # Database path - use persistent storage if available
 DB_PATH = os.path.join(os.path.expanduser('~'), '.chat_app', 'chat.db')
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 # Admin credentials
-ADMIN_ANSWER = os.getenv('ADMIN_ANSWER', 'secret123')  # Change this in production
+ADMIN_ANSWER = os.getenv('ADMIN_ANSWER', 'secret123')
 ADMIN_QUESTION = "What is the secret admin password?"
 
 # In-memory storage of connected users
@@ -22,7 +32,6 @@ connected_users = {}  # session_id -> username
 
 @contextmanager
 def get_db():
-    """Context manager for database connections"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
@@ -31,11 +40,8 @@ def get_db():
         conn.close()
 
 def init_db():
-    """Initialize the database with required tables"""
     with get_db() as conn:
         cursor = conn.cursor()
-        
-        # Users table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,8 +50,6 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
-        # Messages table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,22 +57,19 @@ def init_db():
                 sender TEXT NOT NULL,
                 content TEXT NOT NULL,
                 recipient TEXT,
+                media_url TEXT,
+                media_type TEXT,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
-        # Unread messages table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS unread_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL,
                 message_id INTEGER NOT NULL,
-                read BOOLEAN DEFAULT 0,
-                FOREIGN KEY (message_id) REFERENCES messages(id)
+                read BOOLEAN DEFAULT 0
             )
         ''')
-        
-        # User activity log
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS activity_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,11 +78,9 @@ def init_db():
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
         conn.commit()
 
 def load_users():
-    """Load all users from database"""
     users = {}
     with get_db() as conn:
         cursor = conn.cursor()
@@ -90,15 +89,7 @@ def load_users():
             users[row['username']] = row['password']
     return users
 
-def user_exists(username):
-    """Check if user exists"""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
-        return cursor.fetchone() is not None
-
 def create_user(username, password):
-    """Create a new user"""
     with get_db() as conn:
         cursor = conn.cursor()
         try:
@@ -109,13 +100,12 @@ def create_user(username, password):
             return False
 
 def load_chat_history():
-    """Load all messages from database"""
     messages = []
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT id, type, sender, content, recipient, timestamp 
-            FROM messages 
+            SELECT id, type, sender, content, recipient, media_url, media_type, timestamp
+            FROM messages
             ORDER BY timestamp ASC
         ''')
         for row in cursor.fetchall():
@@ -125,73 +115,50 @@ def load_chat_history():
                 'sender': row['sender'],
                 'content': row['content'],
                 'recipient': row['recipient'],
+                'media_url': row['media_url'],
+                'media_type': row['media_type'],
                 'timestamp': row['timestamp']
             })
     return messages
 
-def save_message(msg_type, sender, content, recipient=None):
-    """Save message to database and mark as unread for relevant users"""
+def save_message(msg_type, sender, content, recipient=None, media_url=None, media_type=None):
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO messages (type, sender, content, recipient)
-            VALUES (?, ?, ?, ?)
-        ''', (msg_type, sender, content, recipient))
+            INSERT INTO messages (type, sender, content, recipient, media_url, media_type)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (msg_type, sender, content, recipient, media_url, media_type))
         conn.commit()
-        
         message_id = cursor.lastrowid
-        
-        # Mark message as unread for all users except sender
+
         if msg_type == 'public':
-            # All users except sender should see this as unread
             cursor.execute('SELECT username FROM users WHERE username != ?', (sender,))
             for row in cursor.fetchall():
-                cursor.execute('''
-                    INSERT INTO unread_messages (username, message_id, read)
-                    VALUES (?, ?, 0)
-                ''', (row['username'], message_id))
+                cursor.execute('''INSERT INTO unread_messages (username, message_id, read) VALUES (?, ?, 0)''', (row['username'], message_id))
         elif msg_type == 'private':
-            # Only recipient sees this as unread
-            cursor.execute('''
-                INSERT INTO unread_messages (username, message_id, read)
-                VALUES (?, ?, 0)
-            ''', (recipient, message_id))
-        
+            cursor.execute('''INSERT INTO unread_messages (username, message_id, read) VALUES (?, ?, 0)''', (recipient, message_id))
         conn.commit()
 
 def get_unread_count(username):
-    """Get unread message count for a user"""
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT COUNT(*) as count FROM unread_messages 
-            WHERE username = ? AND read = 0
-        ''', (username,))
+        cursor.execute('SELECT COUNT(*) as count FROM unread_messages WHERE username = ? AND read = 0', (username,))
         row = cursor.fetchone()
         return row['count'] if row else 0
 
 def mark_messages_read(username):
-    """Mark all messages as read for a user"""
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
-            UPDATE unread_messages SET read = 1
-            WHERE username = ? AND read = 0
-        ''', (username,))
+        cursor.execute('UPDATE unread_messages SET read = 1 WHERE username = ? AND read = 0', (username,))
         conn.commit()
 
 def log_activity(username, action):
-    """Log user activity"""
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO activity_log (username, action)
-            VALUES (?, ?)
-        ''', (username, action))
+        cursor.execute('INSERT INTO activity_log (username, action) VALUES (?, ?)', (username, action))
         conn.commit()
 
 def get_all_users():
-    """Get all users with their stats"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -207,11 +174,10 @@ def get_all_users():
         return [dict(row) for row in cursor.fetchall()]
 
 def get_all_messages():
-    """Get all messages with details"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT id, type, sender, content, recipient, timestamp
+            SELECT id, type, sender, content, recipient, media_url, media_type, timestamp
             FROM messages
             ORDER BY timestamp DESC
             LIMIT 1000
@@ -219,7 +185,6 @@ def get_all_messages():
         return [dict(row) for row in cursor.fetchall()]
 
 def get_activity_log():
-    """Get activity log"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -234,56 +199,53 @@ def get_activity_log():
 def index():
     return render_template('index.html')
 
+@app.route('/upload_media', methods=['POST'])
+def upload_media():
+    if 'file' not in request.files:
+        return {'error': 'No file uploaded'}, 400
+
+    uploaded_file = request.files['file']
+    if uploaded_file.filename == '':
+        return {'error': 'No file selected'}, 400
+
+    try:
+        result = cloudinary.uploader.upload(uploaded_file, resource_type='auto')
+        return {
+            'url': result.get('secure_url'),
+            'resource_type': result.get('resource_type', 'image'),
+            'public_id': result.get('public_id')
+        }, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
-    """Admin dashboard - requires security question"""
     if request.method == 'POST':
         answer = request.form.get('answer', '').strip()
         if answer == ADMIN_ANSWER:
             session['admin_authenticated'] = True
-            return redirect(url_for('admin_dashboard'))
-        else:
-            return render_template('admin_login.html', 
-                                 question=ADMIN_QUESTION, 
-                                 error='Incorrect answer')
-    
-    if session.get('admin_authenticated'):
-        return redirect(url_for('admin_dashboard'))
-    
-    return render_template('admin_login.html', question=ADMIN_QUESTION)
+            return render_template('admin_dashboard.html', users=get_all_users(), messages=get_all_messages(), activity=get_activity_log(), stats={
+                'connected_users': len(connected_users),
+                'total_users': len(get_all_users()),
+                'total_messages': len(get_all_messages()),
+                'online_now': list(connected_users.values())
+            })
+        return render_template('admin_login.html', question=ADMIN_QUESTION, error='Incorrect answer')
 
-@app.route('/admin/dashboard')
-def admin_dashboard():
-    """Admin dashboard view"""
-    if not session.get('admin_authenticated'):
-        return redirect(url_for('admin'))
-    
-    users = get_all_users()
-    messages = get_all_messages()
-    activity = get_activity_log()
-    
-    connected_count = len(connected_users)
-    total_users = len(users)
-    total_messages = len(messages)
-    
-    stats = {
-        'connected_users': connected_count,
-        'total_users': total_users,
-        'total_messages': total_messages,
-        'online_now': list(connected_users.values())
-    }
-    
-    return render_template('admin_dashboard.html', 
-                         users=users,
-                         messages=messages,
-                         activity=activity,
-                         stats=stats)
+    if session.get('admin_authenticated'):
+        return render_template('admin_dashboard.html', users=get_all_users(), messages=get_all_messages(), activity=get_activity_log(), stats={
+            'connected_users': len(connected_users),
+            'total_users': len(get_all_users()),
+            'total_messages': len(get_all_messages()),
+            'online_now': list(connected_users.values())
+        })
+
+    return render_template('admin_login.html', question=ADMIN_QUESTION)
 
 @app.route('/admin/logout')
 def admin_logout():
-    """Logout from admin"""
     session.pop('admin_authenticated', None)
-    return redirect(url_for('admin'))
+    return render_template('admin_login.html', question=ADMIN_QUESTION)
 
 @socketio.on('connect')
 def handle_connect():
@@ -301,47 +263,25 @@ def handle_login(data):
 
     users = load_users()
 
-    # Check if user exists
     if username in users:
         if users[username] != password:
             emit('login_response', {'success': False, 'message': 'Incorrect password'})
             return
     else:
-        # Create new user
         if not create_user(username, password):
             emit('login_response', {'success': False, 'message': 'Username already taken'})
             return
 
-    # Store user session
     session['username'] = username
     connected_users[request.sid] = username
-    
-    # Log activity
     log_activity(username, 'login')
 
-    print(f"[SERVER] {username} logged in")
-    
-    # Get unread count
     unread_count = get_unread_count(username)
-    
-    emit('login_response', {
-        'success': True, 
-        'message': f'Welcome {username}!',
-        'unread_count': unread_count
-    })
-    
-    # Send chat history to the user
-    chat_history = load_chat_history()
-    emit('chat_history', {'messages': chat_history, 'unread_count': unread_count})
-    
-    # Mark messages as read
+    emit('login_response', {'success': True, 'message': f'Welcome {username}!', 'unread_count': unread_count})
+    emit('chat_history', {'messages': load_chat_history(), 'unread_count': unread_count})
     mark_messages_read(username)
-    
-    # Notify all users
-    socketio.emit('user_joined', {
-        'username': username,
-        'message': f'{username} joined the chat'
-    })
+
+    socketio.emit('user_joined', {'username': username, 'message': f'{username} joined the chat'})
     save_message('system', 'server', f'{username} joined the chat')
 
 @socketio.on('message')
@@ -352,20 +292,31 @@ def handle_message(data):
 
     username = connected_users[request.sid]
     msg = data.get('message', '').strip()
+    media_url = data.get('media_url')
+    media_type = data.get('media_type')
+
+    timestamp = datetime.now().strftime('%H:%M:%S')
+
+    if media_url:
+        socketio.emit('message', {
+            'username': username,
+            'message': '',
+            'media_url': media_url,
+            'media_type': media_type,
+            'timestamp': timestamp
+        })
+        save_message('public', username, '', None, media_url, media_type)
+        log_activity(username, 'sent media message')
+        return
 
     if not msg:
         return
 
-    timestamp = datetime.now().strftime('%H:%M:%S')
-
-    # Check for private message format: @username: message
-    if msg.startswith("@"):
+    if msg.startswith('@'):
         try:
-            recipient, content = msg[1:].split(":", 1)
+            recipient, content = msg[1:].split(':', 1)
             recipient = recipient.strip()
             content = content.strip()
-
-            # Find recipient's session ID
             recipient_sid = None
             for sid, uname in connected_users.items():
                 if uname == recipient:
@@ -378,13 +329,7 @@ def handle_message(data):
                     'message': content,
                     'timestamp': timestamp
                 }, to=recipient_sid)
-                
-                emit('private_message_sent', {
-                    'to': recipient,
-                    'message': content,
-                    'timestamp': timestamp
-                })
-                
+                emit('private_message_sent', {'to': recipient, 'message': content, 'timestamp': timestamp})
                 save_message('private', username, content, recipient)
                 log_activity(username, f'sent private message to {recipient}')
             else:
@@ -392,12 +337,7 @@ def handle_message(data):
         except ValueError:
             emit('error', {'message': 'Invalid format. Use @username: message'})
     else:
-        # Broadcast message
-        socketio.emit('message', {
-            'username': username,
-            'message': msg,
-            'timestamp': timestamp
-        })
+        socketio.emit('message', {'username': username, 'message': msg, 'timestamp': timestamp})
         save_message('public', username, msg)
         log_activity(username, 'sent public message')
 
@@ -407,16 +347,11 @@ def handle_disconnect():
         username = connected_users[request.sid]
         del connected_users[request.sid]
         print(f"[SERVER] {username} disconnected")
-        socketio.emit('user_left', {
-            'username': username,
-            'message': f'{username} left the chat'
-        })
+        socketio.emit('user_left', {'username': username, 'message': f'{username} left the chat'})
         save_message('system', 'server', f'{username} left the chat')
         log_activity(username, 'logout')
 
 if __name__ == '__main__':
-    # Initialize database on startup
     init_db()
-    
     port = int(os.getenv('PORT', 10000))
     socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
