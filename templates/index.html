@@ -4,12 +4,7 @@
     <title>Chat Server</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -18,42 +13,24 @@
             justify-content: center;
             align-items: center;
         }
-        
         .container {
             width: 90%;
-            max-width: 500px;
+            max-width: 520px;
             background: white;
             border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
             overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
         }
-        
-        .login-section {
-            padding: 30px;
-            background: #f8f9fa;
-            display: none;
-        }
-        
-        .login-section.active {
-            display: block;
-        }
-        
+        .login-section, .chat-section { display: none; }
+        .login-section.active, .chat-section.active { display: block; }
+        .login-section { padding: 30px; background: #f8f9fa; }
         .chat-section {
+            height: 620px;
             display: none;
-            height: 600px;
             flex-direction: column;
         }
-        
-        .chat-section.active {
-            display: flex;
-        }
-        
-        .login-section h2 {
-            text-align: center;
-            margin-bottom: 20px;
-            color: #333;
-        }
-        
+        .chat-section.active { display: flex; }
+        h2 { text-align: center; margin-bottom: 20px; color: #333; }
         input {
             width: 100%;
             padding: 12px;
@@ -62,7 +39,6 @@
             border-radius: 5px;
             font-size: 14px;
         }
-        
         button {
             width: 100%;
             padding: 12px;
@@ -72,152 +48,101 @@
             border-radius: 5px;
             font-size: 16px;
             cursor: pointer;
-            transition: background 0.3s;
         }
-        
-        button:hover {
-            background: #764ba2;
-        }
-        
+        button:hover { background: #764ba2; }
         .chat-header {
             background: #667eea;
             color: white;
             padding: 15px;
             text-align: center;
         }
-        
-        .chat-header h2 {
-            margin: 0;
-            font-size: 20px;
-        }
-        
-        .chat-header small {
-            display: block;
-            margin-top: 5px;
-            opacity: 0.9;
-        }
-        
+        .chat-header h2 { margin: 0; font-size: 20px; }
         .messages {
             flex: 1;
             overflow-y: auto;
             padding: 15px;
             background: #f8f9fa;
         }
-        
         .message {
             margin-bottom: 12px;
             padding: 10px;
             background: white;
-            border-radius: 5px;
-            border-left: 3px solid #667eea;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
         }
-        
         .message.system {
             border-left-color: #999;
             background: #e9ecef;
             font-style: italic;
             color: #666;
         }
-        
         .message.private {
             border-left-color: #ffc107;
             background: #fff3cd;
         }
-        
-        .message strong {
-            color: #667eea;
-        }
-        
-        .message.private strong {
-            color: #ff6b6b;
-        }
-        
-        .message-time {
-            font-size: 12px;
-            color: #999;
-            margin-top: 5px;
-        }
-        
+        .message strong { color: #667eea; }
+        .message.private strong { color: #ff6b6b; }
+        .message-time { font-size: 12px; color: #999; margin-top: 5px; }
         .input-area {
+            display: flex;
+            gap: 10px;
             padding: 15px;
             background: white;
             border-top: 1px solid #ddd;
+        }
+        .input-area input { margin: 0; flex: 1; }
+        .input-area button { width: 90px; padding: 10px; }
+        .media-upload {
             display: flex;
-            gap: 10px;
+            gap: 8px;
+            align-items: center;
+            padding: 10px 15px;
+            background: #f1f3f5;
+            border-top: 1px solid #ddd;
         }
-        
-        .input-area input {
-            flex: 1;
+        .media-upload input[type=file] {
+            width: auto;
             margin: 0;
+            flex: 1;
+            padding: 8px;
+        }
+        .media-upload button {
+            width: 120px;
             padding: 10px;
+            font-size: 14px;
         }
-        
-        .input-area button {
-            width: 80px;
-            padding: 10px;
-        }
-        
-        .error {
-            color: #ff6b6b;
-            padding: 10px;
-            background: #ffe0e0;
-            border-radius: 5px;
-            margin-bottom: 10px;
-            display: none;
-        }
-        
-        .error.show {
-            display: block;
-        }
-        
         .logout-btn {
             background: #ff6b6b;
             padding: 10px 20px;
             width: auto;
             margin: 10px 0 0 0;
         }
-        
-        .logout-btn:hover {
-            background: #ff5252;
-        }
-
-        .notification-badge {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #28a745;
-            color: white;
-            padding: 15px 20px;
+        .logout-btn:hover { background: #ff5252; }
+        .error {
+            color: #ff6b6b;
+            background: #ffe0e0;
             border-radius: 5px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 10px;
             display: none;
-            z-index: 9999;
-            animation: slideIn 0.3s ease-out;
-            max-width: 300px;
-            word-wrap: break-word;
+            margin-bottom: 10px;
         }
-
-        .notification-badge.show {
+        .error.show { display: block; }
+        .media-preview {
+            max-width: 100%;
+            max-height: 240px;
+            border-radius: 8px;
+            margin-top: 8px;
             display: block;
         }
-
-        @keyframes slideIn {
-            from {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
+        video.media-preview {
+            width: 100%;
+            max-height: 240px;
+            background: #111;
         }
     </style>
 </head>
 <body>
-    <div class="notification-badge" id="notificationBadge"></div>
-    
     <div class="container">
-        <!-- Login Section -->
         <div class="login-section active" id="loginSection">
             <h2>Chat Server Login</h2>
             <div class="error" id="loginError"></div>
@@ -225,18 +150,25 @@
             <input type="password" id="password" placeholder="Password" />
             <button onclick="login()">Login</button>
         </div>
-        
-        <!-- Chat Section -->
+
         <div class="chat-section" id="chatSection">
             <div class="chat-header">
                 <h2>Chat - <span id="currentUser"></span></h2>
                 <small>Tip: Use @username: message for private messages</small>
             </div>
+
             <div class="messages" id="messages"></div>
+
+            <div class="media-upload">
+                <input type="file" id="mediaUpload" accept="image/*,video/*" />
+                <button onclick="uploadMedia()">Attach</button>
+            </div>
+
             <div class="input-area">
                 <input type="text" id="messageInput" placeholder="Type message..." onkeypress="handleKeyPress(event)" />
                 <button onclick="sendMessage()">Send</button>
             </div>
+
             <button class="logout-btn" onclick="logout()">Logout</button>
         </div>
     </div>
@@ -245,14 +177,7 @@
         const socket = io();
         let currentUsername = '';
 
-        // Request notification permission on load
-        if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission();
-        }
-
-        socket.on('connect', () => {
-            console.log('Connected to server');
-        });
+        socket.on('connect', () => { console.log('Connected'); });
 
         socket.on('login_response', (data) => {
             if (data.success) {
@@ -266,77 +191,120 @@
             }
         });
 
-        // Load chat history when user logs in
         socket.on('chat_history', (data) => {
-            const messages = data.messages;
-            if (messages && messages.length > 0) {
-                messages.forEach(msg => {
-                    if (msg.type === 'public') {
-                        // Extract time from timestamp
-                        const timeStr = msg.timestamp.includes(' ') 
-                            ? msg.timestamp.split(' ')[1] 
-                            : msg.timestamp;
-                        addMessage(`${msg.sender}: ${msg.content}`, 'regular', msg.sender, timeStr);
-                    } else if (msg.type === 'private') {
-                        if (msg.sender === currentUsername) {
-                            addMessage(`[DM to ${msg.recipient}]: ${msg.content}`, 'private', `to ${msg.recipient}`);
-                        } else if (msg.recipient === currentUsername) {
-                            addMessage(`[DM from ${msg.sender}]: ${msg.content}`, 'private', msg.sender);
-                        }
-                    } else if (msg.type === 'system') {
-                        addMessage(msg.content, 'system');
+            const messages = data.messages || [];
+            messages.forEach(msg => {
+                if (msg.media_url) {
+                    renderMediaMessage(msg);
+                } else if (msg.type === 'system') {
+                    addMessage(msg.content, 'system');
+                } else if (msg.type === 'private') {
+                    if (msg.sender === currentUsername) {
+                        addMessage(`[DM to ${msg.recipient}]: ${msg.content}`, 'private', `to ${msg.recipient}`, msg.timestamp);
+                    } else if (msg.recipient === currentUsername) {
+                        addMessage(`[DM from ${msg.sender}]: ${msg.content}`, 'private', msg.sender, msg.timestamp);
                     }
-                });
-                // Scroll to bottom
-                const messagesDiv = document.getElementById('messages');
-                messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            }
+                } else {
+                    addMessage(`${msg.sender}: ${msg.content}`, 'regular', msg.sender, msg.timestamp);
+                }
+            });
+
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         });
 
         socket.on('message', (data) => {
-            addMessage(`${data.username}: ${data.message}`, 'regular', data.username, data.timestamp);
-            sendNotification(`New message from ${data.username}`, data.message);
-        });
-
-        socket.on('user_joined', (data) => {
-            addMessage(data.message, 'system');
-        });
-
-        socket.on('user_left', (data) => {
-            addMessage(data.message, 'system');
+            if (data.media_url) {
+                renderMediaMessage({
+                    sender: data.username,
+                    content: '',
+                    media_url: data.media_url,
+                    media_type: data.media_type,
+                    timestamp: data.timestamp
+                });
+            } else {
+                addMessage(`${data.username}: ${data.message}`, 'regular', data.username, data.timestamp);
+            }
         });
 
         socket.on('private_message', (data) => {
-            addMessage(`[DM from ${data.from}]: ${data.message}`, 'private', data.from);
-            sendNotification(`Private message from ${data.from}`, data.message);
+            if (data.media_url) {
+                renderMediaMessage({
+                    sender: data.from,
+                    content: '',
+                    media_url: data.media_url,
+                    media_type: data.media_type,
+                    timestamp: data.timestamp
+                }, 'private');
+            } else {
+                addMessage(`[DM from ${data.from}]: ${data.message}`, 'private', data.from, data.timestamp);
+            }
         });
 
         socket.on('private_message_sent', (data) => {
-            addMessage(`[DM to ${data.to}]: ${data.message}`, 'private', `to ${data.to}`);
+            addMessage(`[DM to ${data.to}]: ${data.message}`, 'private', `to ${data.to}`, data.timestamp);
         });
 
-        socket.on('error', (data) => {
-            showChatError(data.message);
-        });
+        socket.on('user_joined', (data) => addMessage(data.message, 'system'));
+        socket.on('user_left', (data) => addMessage(data.message, 'system'));
+        socket.on('error', (data) => showChatError(data.message));
 
-        function sendNotification(title, message) {
-            // Show in-app notification badge
-            showNotificationBadge(`${title}: ${message}`);
-            
-            // Send browser notification if permission granted
-            if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification(title, {
-                    body: message,
-                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="75" font-size="75">💬</text></svg>'
-                });
+        function renderMediaMessage(msg, forceType = null) {
+            const messagesDiv = document.getElementById('messages');
+            const messageEl = document.createElement('div');
+            const type = forceType || 'regular';
+
+            messageEl.className = `message ${type}`;
+
+            if (type === 'system') {
+                messageEl.innerHTML = msg.content;
+            } else {
+                const label = (msg.sender || msg.from || 'Media');
+                const mediaHtml = msg.media_type === 'video'
+                    ? `<video class="media-preview" controls src="${msg.media_url}"></video>`
+                    : `<img class="media-preview" src="${msg.media_url}" />`;
+
+                messageEl.innerHTML = `<strong>${label}</strong><br>${mediaHtml}`;
+                if (msg.timestamp) {
+                    messageEl.innerHTML += `<div class="message-time">${msg.timestamp}</div>`;
+                }
             }
+            messagesDiv.appendChild(messageEl);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        function showNotificationBadge(message) {
-            const badge = document.getElementById('notificationBadge');
-            badge.textContent = message;
-            badge.classList.add('show');
-            setTimeout(() => badge.classList.remove('show'), 3000);
+        function showLoginError(msg) {
+            const errorDiv = document.getElementById('loginError');
+            errorDiv.textContent = msg;
+            errorDiv.classList.add('show');
+            setTimeout(() => errorDiv.classList.remove('show'), 3000);
+        }
+
+        function showChatError(msg) {
+            const messagesDiv = document.getElementById('messages');
+            const errorEl = document.createElement('div');
+            errorEl.className = 'message system';
+            errorEl.innerHTML = `<strong>Error:</strong> ${msg}`;
+            messagesDiv.appendChild(errorEl);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function addMessage(text, type = 'regular', user = '', time = '') {
+            const messagesDiv = document.getElementById('messages');
+            const messageEl = document.createElement('div');
+            messageEl.className = `message ${type}`;
+
+            if (type === 'system') {
+                messageEl.innerHTML = text;
+            } else {
+                messageEl.innerHTML = `<strong>${user}</strong><br>${text}`;
+                if (time) {
+                    messageEl.innerHTML += `<div class="message-time">${time}</div>`;
+                }
+            }
+
+            messagesDiv.appendChild(messageEl);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
         function login() {
@@ -354,7 +322,6 @@
         function sendMessage() {
             const input = document.getElementById('messageInput');
             const message = input.value.trim();
-
             if (!message) return;
 
             socket.emit('message', { message });
@@ -368,27 +335,35 @@
             }
         }
 
-        function addMessage(text, type = 'regular', user = '', time = '') {
-            const messagesDiv = document.getElementById('messages');
-            const messageEl = document.createElement('div');
-            messageEl.className = `message ${type}`;
+        async function uploadMedia() {
+            const fileInput = document.getElementById('mediaUpload');
+            const file = fileInput.files[0];
+            if (!file) return;
 
-            if (type === 'system') {
-                messageEl.innerHTML = text;
-            } else if (type === 'private') {
-                messageEl.innerHTML = `<strong>${user}</strong><br>${text}`;
-                if (time) {
-                    messageEl.innerHTML += `<div class="message-time">${time}</div>`;
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/upload_media', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await res.json();
+                if (data.error) {
+                    alert(data.error);
+                    return;
                 }
-            } else {
-                messageEl.innerHTML = `<strong>${user}</strong><br>${text}`;
-                if (time) {
-                    messageEl.innerHTML += `<div class="message-time">${time}</div>`;
-                }
+
+                socket.emit('message', {
+                    message: '',
+                    media_url: data.url,
+                    media_type: data.resource_type
+                });
+                fileInput.value = '';
+            } catch (err) {
+                alert('Upload failed: ' + err.message);
             }
-
-            messagesDiv.appendChild(messageEl);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
         function logout() {
@@ -400,22 +375,6 @@
             document.getElementById('loginSection').classList.add('active');
             document.getElementById('chatSection').classList.remove('active');
             socket.connect();
-        }
-
-        function showLoginError(msg) {
-            const errorDiv = document.getElementById('loginError');
-            errorDiv.textContent = msg;
-            errorDiv.classList.add('show');
-            setTimeout(() => errorDiv.classList.remove('show'), 3000);
-        }
-
-        function showChatError(msg) {
-            const messagesDiv = document.getElementById('messages');
-            const errorEl = document.createElement('div');
-            errorEl.className = 'message system';
-            errorEl.innerHTML = `<strong>Error:</strong> ${msg}`;
-            messagesDiv.appendChild(errorEl);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
     </script>
 </body>
