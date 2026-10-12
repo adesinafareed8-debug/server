@@ -1,38 +1,117 @@
 from flask import Flask, render_template, request, session
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_socketio import SocketIO, emit
 import os
+import sqlite3
 from datetime import datetime
+from contextlib import contextmanager
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# File paths
-user_file = "users.txt"
-chat_log = "chat_history.txt"
+# Database path - use persistent storage if available
+DB_PATH = os.path.join(os.path.expanduser('~'), '.chat_app', 'chat.db')
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 # In-memory storage of connected users
 connected_users = {}  # session_id -> username
 
-# Ensure files exist
-if not os.path.exists(user_file):
-    open(user_file, 'w').close()
+@contextmanager
+def get_db():
+    """Context manager for database connections"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
 
-if not os.path.exists(chat_log):
-    open(chat_log, 'w').close()
+def init_db():
+    """Initialize the database with required tables"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # Users table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Messages table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL,
+                sender TEXT NOT NULL,
+                content TEXT NOT NULL,
+                recipient TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        conn.commit()
 
 def load_users():
+    """Load all users from database"""
     users = {}
-    with open(user_file, 'r') as f:
-        for line in f:
-            if ":" in line:
-                uname, pwd = line.strip().split(":", 1)
-                users[uname] = pwd
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT username, password FROM users')
+        for row in cursor.fetchall():
+            users[row['username']] = row['password']
     return users
 
-def log_message(msg):
-    with open(chat_log, 'a') as f:
-        f.write(msg + '\n')
+def user_exists(username):
+    """Check if user exists"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
+        return cursor.fetchone() is not None
+
+def create_user(username, password):
+    """Create a new user"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('INSERT INTO users (username, password) VALUES (?, ?)', (username, password))
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+def load_chat_history():
+    """Load all messages from database"""
+    messages = []
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT type, sender, content, recipient, timestamp 
+            FROM messages 
+            ORDER BY timestamp ASC
+        ''')
+        for row in cursor.fetchall():
+            messages.append({
+                'type': row['type'],
+                'sender': row['sender'],
+                'content': row['content'],
+                'recipient': row['recipient'],
+                'timestamp': row['timestamp']
+            })
+    return messages
+
+def save_message(msg_type, sender, content, recipient=None):
+    """Save message to database"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO messages (type, sender, content, recipient)
+            VALUES (?, ?, ?, ?)
+        ''', (msg_type, sender, content, recipient))
+        conn.commit()
 
 @app.route('/')
 def index():
@@ -61,8 +140,9 @@ def handle_login(data):
             return
     else:
         # Create new user
-        with open(user_file, 'a') as f:
-            f.write(f"{username}:{password}\n")
+        if not create_user(username, password):
+            emit('login_response', {'success': False, 'message': 'Username already taken'})
+            return
 
     # Store user session
     session['username'] = username
@@ -71,11 +151,16 @@ def handle_login(data):
     print(f"[SERVER] {username} logged in")
     emit('login_response', {'success': True, 'message': f'Welcome {username}!'})
     
+    # Send chat history to the user
+    chat_history = load_chat_history()
+    emit('chat_history', {'messages': chat_history})
+    
     # Notify all users
     socketio.emit('user_joined', {
         'username': username,
         'message': f'{username} joined the chat'
     })
+    save_message('system', 'server', f'{username} joined the chat')
 
 @socketio.on('message')
 def handle_message(data):
@@ -88,6 +173,8 @@ def handle_message(data):
 
     if not msg:
         return
+
+    timestamp = datetime.now().strftime('%H:%M:%S')
 
     # Check for private message format: @username: message
     if msg.startswith("@"):
@@ -106,28 +193,29 @@ def handle_message(data):
             if recipient_sid:
                 socketio.emit('private_message', {
                     'from': username,
-                    'message': content
+                    'message': content,
+                    'timestamp': timestamp
                 }, to=recipient_sid)
                 
                 emit('private_message_sent', {
                     'to': recipient,
-                    'message': content
+                    'message': content,
+                    'timestamp': timestamp
                 })
                 
-                log_message(f"[DM] {username} -> {recipient}: {content}")
+                save_message('private', username, content, recipient)
             else:
                 emit('error', {'message': f'User {recipient} not found or offline'})
         except ValueError:
             emit('error', {'message': 'Invalid format. Use @username: message'})
     else:
         # Broadcast message
-        full_msg = f"{username}: {msg}"
         socketio.emit('message', {
             'username': username,
             'message': msg,
-            'timestamp': datetime.now().strftime('%H:%M:%S')
+            'timestamp': timestamp
         })
-        log_message(full_msg)
+        save_message('public', username, msg)
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -139,7 +227,11 @@ def handle_disconnect():
             'username': username,
             'message': f'{username} left the chat'
         })
+        save_message('system', 'server', f'{username} left the chat')
 
 if __name__ == '__main__':
+    # Initialize database on startup
+    init_db()
+    
     port = int(os.getenv('PORT', 10000))
     socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
