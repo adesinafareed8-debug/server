@@ -88,17 +88,19 @@
 <body>
     <div class="container">
         <h1>🔐 Admin Panel</h1>
-        <p class="subtitle">Answer the security question to access</p>
+        <p class="subtitle">Sign in with your administrator credentials</p>
 
         {% if error %}
         <div class="error show">{{ error }}</div>
         {% endif %}
 
-        <div class="question">{{ question }}</div>
+        
 
-        <form method="POST">
-            <input type="text" name="answer" placeholder="Enter your answer..." required autofocus />
-            <button type="submit">Access Dashboard</button>
+        <form method="POST" action="/admin">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="text" name="username" placeholder="Administrator username" autocomplete="username" required autofocus maxlength="64" />
+            <input type="password" name="password" placeholder="Administrator password" autocomplete="current-password" required />
+            <button type="submit">Sign in</button>
         </form>
 
         <div class="footer">
