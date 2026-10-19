@@ -227,30 +227,7 @@
     </style>
 </head>
 <body>
-    <script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyCzkQmdH-p69Qczn9tj1PRVqFsexcEZBt0",
-    authDomain: "m-d-f-messaging-app.firebaseapp.com",
-    projectId: "m-d-f-messaging-app",
-    storageBucket: "m-d-f-messaging-app.firebasestorage.app",
-    messagingSenderId: "735660326068",
-    appId: "1:735660326068:web:a04dcce7a9810c6fc7abe1",
-    measurementId: "G-RGRM2XHJEK"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script>
-    <div class="container">
+<div class="container">
         <div class="login-section active" id="loginSection">
             <h2>[ CHAT SERVER ]</h2>
             <div class="error" id="loginError"></div>
@@ -284,16 +261,18 @@
     <script>
         const socket = io();
         let currentUsername = '';
+        let uploadToken = '';
 
         socket.on('connect', () => { console.log('[+] Connected'); });
 
         socket.on('login_response', (data) => {
             if (data.success) {
-                currentUsername = document.getElementById('username').value;
+                currentUsername = data.username || document.getElementById('username').value.trim();
+                uploadToken = data.upload_token || '';
                 document.getElementById('currentUser').textContent = currentUsername;
                 document.getElementById('loginSection').classList.remove('active');
                 document.getElementById('chatSection').classList.add('active');
-                document.getElementById('messages').innerHTML = '';
+                document.getElementById('messages').replaceChildren();
             } else {
                 showLoginError(data.message);
             }
@@ -361,29 +340,48 @@
             const messagesDiv = document.getElementById('messages');
             const messageEl = document.createElement('div');
             const type = forceType || 'regular';
-
             messageEl.className = `message ${type}`;
 
-            if (type === 'system') {
-                messageEl.innerHTML = msg.content;
-            } else {
-                const label = (msg.sender || msg.from || 'Media');
-                const mediaHtml = msg.media_type === 'video'
-                    ? `<video class="media-preview" controls src="${msg.media_url}"></video>`
-                    : `<img class="media-preview" src="${msg.media_url}" />`;
+            const label = document.createElement('strong');
+            label.textContent = type === 'system' ? `[ ${msg.content || ''} ]` : `> ${msg.sender || msg.from || 'Media'}`;
+            messageEl.appendChild(label);
 
-                messageEl.innerHTML = `<strong>> ${label}</strong><br>${mediaHtml}`;
+            if (type !== 'system') {
+                const mediaUrl = safeMediaUrl(msg.media_url);
+                if (!mediaUrl || !['image', 'video'].includes(msg.media_type)) {
+                    const warning = document.createElement('div');
+                    warning.textContent = '[Unsupported media]';
+                    messageEl.appendChild(warning);
+                } else {
+                    const media = document.createElement(msg.media_type === 'video' ? 'video' : 'img');
+                    media.className = 'media-preview';
+                    media.src = mediaUrl;
+                    if (msg.media_type === 'video') media.controls = true;
+                    media.alt = msg.media_type === 'image' ? 'Shared image' : '';
+                    messageEl.appendChild(media);
+                }
                 if (msg.timestamp) {
-                    messageEl.innerHTML += `<div class="message-time">${msg.timestamp}</div>`;
+                    const time = document.createElement('div');
+                    time.className = 'message-time';
+                    time.textContent = msg.timestamp;
+                    messageEl.appendChild(time);
                 }
             }
             messagesDiv.appendChild(messageEl);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
+        function safeMediaUrl(value) {
+            try {
+                const url = new URL(value, window.location.origin);
+                if (url.protocol === 'https:' && (url.hostname === 'cloudinary.com' || url.hostname.endsWith('.cloudinary.com'))) return url.href;
+            } catch (_) {}
+            return null;
+        }
+
         function showLoginError(msg) {
             const errorDiv = document.getElementById('loginError');
-            errorDiv.textContent = '[ ERROR ] ' + msg;
+            errorDiv.textContent = '[ ERROR ] ' + String(msg || 'Request failed');
             errorDiv.classList.add('show');
             setTimeout(() => errorDiv.classList.remove('show'), 3000);
         }
@@ -392,7 +390,10 @@
             const messagesDiv = document.getElementById('messages');
             const errorEl = document.createElement('div');
             errorEl.className = 'message system';
-            errorEl.innerHTML = `<strong>> ERROR:</strong> ${msg}`;
+            const label = document.createElement('strong');
+            label.textContent = '> ERROR: ';
+            errorEl.appendChild(label);
+            errorEl.appendChild(document.createTextNode(String(msg || 'Request failed')));
             messagesDiv.appendChild(errorEl);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
@@ -403,11 +404,18 @@
             messageEl.className = `message ${type}`;
 
             if (type === 'system') {
-                messageEl.innerHTML = `[ ${text} ]`;
+                messageEl.textContent = `[ ${String(text)} ]`;
             } else {
-                messageEl.innerHTML = `<strong>> ${user}</strong><br>${text}`;
+                const label = document.createElement('strong');
+                label.textContent = `> ${String(user)}`;
+                messageEl.appendChild(label);
+                messageEl.appendChild(document.createElement('br'));
+                messageEl.appendChild(document.createTextNode(String(text)));
                 if (time) {
-                    messageEl.innerHTML += `<div class="message-time">${time}</div>`;
+                    const timeEl = document.createElement('div');
+                    timeEl.className = 'message-time';
+                    timeEl.textContent = String(time);
+                    messageEl.appendChild(timeEl);
                 }
             }
 
@@ -417,7 +425,7 @@
 
         function login() {
             const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value.trim();
+            const password = document.getElementById('password').value;
 
             if (!username || !password) {
                 showLoginError('Username and password required');
@@ -447,6 +455,8 @@
             const fileInput = document.getElementById('mediaUpload');
             const file = fileInput.files[0];
             if (!file) return;
+            if (file.size > 8 * 1024 * 1024) { alert('[!] File must be smaller than 8 MB.'); return; }
+            if (!uploadToken || !currentUsername) { alert('[!] Please log in again before uploading.'); return; }
 
             const formData = new FormData();
             formData.append('file', file);
@@ -454,6 +464,7 @@
             try {
                 const res = await fetch('/upload_media', {
                     method: 'POST',
+                    headers: { 'X-Chat-Token': uploadToken, 'X-Chat-Username': currentUsername },
                     body: formData
                 });
 
@@ -477,9 +488,10 @@
         function logout() {
             socket.disconnect();
             currentUsername = '';
+            uploadToken = '';
             document.getElementById('username').value = '';
             document.getElementById('password').value = '';
-            document.getElementById('messages').innerHTML = '';
+            document.getElementById('messages').replaceChildren();
             document.getElementById('loginSection').classList.add('active');
             document.getElementById('chatSection').classList.remove('active');
             socket.connect();
