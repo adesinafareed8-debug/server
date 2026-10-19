@@ -112,7 +112,7 @@
 <body>
     <div class="header">
         <h1>🔐 Admin Dashboard</h1>
-        <a href="/admin/logout">Logout</a>
+        <form method="POST" action="/admin/logout"><input type="hidden" name="csrf_token" value="{{ session.get('admin_csrf_token', '') }}"><button type="submit" style="background:rgba(255,255,255,0.2);color:white;border:0;padding:10px 20px;border-radius:5px;cursor:pointer;">Logout</button></form>
     </div>
 
     <div class="stats">
