@@ -510,5 +510,10 @@ if __name__ == "__main__":
     # WSGI server compatible with Flask-SocketIO; do not enable debug or unsafe Werkzeug.
     if IS_PRODUCTION:
         print("[SECURITY] Production mode: deploy with eventlet/gevent and a TLS reverse proxy.")
-    socketio.run(app, host=os.getenv("HOST", "127.0.0.1" if not IS_PRODUCTION else "0.0.0.0"),
-                 port=port, debug=False, allow_unsafe_werkzeug=not IS_PRODUCTION)
+    socketio.run(
+    app,
+    host="0.0.0.0",
+    port=port,
+    debug=False,
+    allow_unsafe_werkzeug=True
+)
